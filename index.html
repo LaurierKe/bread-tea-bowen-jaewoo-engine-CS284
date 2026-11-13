@@ -1,0 +1,188 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GameSplat</title>
+    <style>
+      h1 { text-align: center; }
+      .container { margin: 0 auto; padding: 60px 20%; }
+      body { font-family: Arial, sans-serif; line-height: 1.5; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>GameSplat: Optimizing Gaussian Splats for Video Game Scenes</h1>
+      <div style="text-align: center;">
+        Team Members: Jonathan Cao, Laurier Ke, Justin Lee, Jameson Liu 
+      </div>
+
+      <h2>Summary</h2>
+      <p>
+        GameSplat will reconstruct a 3D Gaussian splat from video game footage.
+        We will develop three connected parts of the pipeline: COLMAP-based pose
+        estimation and trajectory selection, automated UI masking, and a repeated texture
+        prior for refinement. The output will be a Splatfacto model, an exported
+        PLY, and a flythrough video.
+      </p>
+
+      <h2>Problem Description</h2>
+      <p>
+        Gaussian splatting typically starts with views of a static scene along
+        with known extrinsics and intrinsics. Gameplay video may provide only
+        images without camera poses, so we must rely on Structure-from-Motion via
+        COLMAP.
+      </p>
+      <p>
+        Unlike real-world footage, video game footage contains fixed UI elements,
+        including reticles and inventory bars. Player arms, weapons, and tools
+        also move separately from the world. Treating these as scene content
+        creates floaters and can severely damage COLMAP feature matching, which
+        motivates excluding them as a preprocessing step.
+      </p>
+      <p>
+        Video games also contain repeated textures and materials, which create
+        ambiguity in pose estimation. While repeated textures can mess with
+        COLMAP, they are also an advantage during reconstruction because repeated
+        material is a useful prior. For example, a nearby copy of an object may
+        show the same material more clearly than a distant one. During training,
+        the nearby observation can constrain the shared texture of the distant
+        object; when a held-out view contains that distant object, this shared
+        estimate should generalize better than fitting its limited observations
+        independently.
+      </p>
+      <p>
+        Our pipeline is: gameplay video → frame extraction and global
+        screen-space masks → masked COLMAP pose recovery and trajectory selection
+        → stock Splatfacto Gaussian splat training → repeated-material texture
+        refinement → PLY, held-out renders, and flythrough.
+      </p>
+      <p>
+        Masking will use screen-space techniques such as edge detection and color
+        persistence, along with consistent pixel disagreement during an initial
+        reconstruction pass. A broad COLMAP pass will select the longest
+        temporally smooth pose segment, then a denser pass will reconstruct it.
+        The texture stage will jointly refine repeated material patches while
+        retaining a standard Gaussian splat PLY. We will judge it on held-out
+        views and patches, rather than training loss alone.
+      </p>
+
+      <h2>Goals and Deliverables</h2>
+
+      <h3>What We Plan to Deliver</h3>
+      <ol>
+        <li>
+          A pipeline/codebase for reconstructing gameplay scenes. Our results
+          will be reproducible using this code.
+        </li>
+        <li>
+          A comparison between different masking techniques. We will show masks
+          from our pipeline alongside human-labeled masks and a no-mask ablation,
+          then measure downstream pose-estimation and reconstruction quality.
+        </li>
+        <li>
+          A comparison of coarse-to-fine and single-pass COLMAP. We will compare
+          their selected trajectories and measure downstream reconstruction
+          quality.
+        </li>
+        <li>
+          A comparison of texture-refinement techniques. We will compare methods
+          for refining repeated textures, including optimizing geometry and color
+          versus optimizing color alone.
+        </li>
+        <li>
+          A final paper and generated artifacts. The results will include masks,
+          COLMAP trajectory paths, close-up texture-refinement comparisons, and
+          overall reconstruction images, PLYs, and flythroughs.
+        </li>
+      </ol>
+
+      <h3>What We Hope to Deliver</h3>
+      <ol>
+        <li>
+          A comprehensive hyperparameter sweep for the above techniques. Each
+          pipeline stage has parameters that influence its behavior; for example,
+          the masking algorithm will have a configurable tolerance for RGB
+          shifts. If time permits, we will evaluate how varying parameters
+          affects performance.
+        </li>
+        <li>
+          An evaluation of pipeline performance across different video games. We
+          plan to start with Minecraft and try a few other games if time permits.
+        </li>
+      </ol>
+
+      <h3>Questions and Evaluation</h3>
+      <ol>
+        <li>Does automatic UI masking consistently match manually created masks across multiple inputs?</li>
+        <li>How effective is pixel disagreement with the scene at identifying UI elements?</li>
+        <li>Does coarse-to-fine trajectory selection improve pose-estimation stability or worsen view coverage?</li>
+        <li>Can shared texture optimization improve validation performance without hurting training performance?</li>
+      </ol>
+      <p>
+        We will have different measurements of quality for each part of the pipeline. For masking, we will measure
+        the percentage of the screen masked out and the percentage of ground
+        truth UI incorrectly left unmasked. For COLMAP, we will measure rotation
+        and translation changes between consecutive frames and COLMAP's reported
+        reprojection error. For Splatfacto reconstruction, we will measure PSNR,
+        SSIM, and mean RGB error on held-out validation images, and inspect
+        training curves.
+      </p>
+
+      <h2>Schedule</h2>
+
+      <h3>Week 1: Baseline Pipeline and Evaluation</h3>
+      <ul>
+        <li>Get a basic pipeline working with stock COLMAP and Splatfacto.</li>
+        <li>Run on simple inputs with UI hidden.</li>
+        <li>Build scaffolding for evaluation.</li>
+      </ul>
+
+      <h3>Week 2: Automatic Masking and COLMAP Trajectory Selection</h3>
+      <ul>
+        <li>Implement screen-space masking techniques and the disagreement measurement workflow.</li>
+        <li>Test masking techniques against the baseline.</li>
+        <li>Implement coarse-to-fine COLMAP passes.</li>
+        <li>Test COLMAP improvements against the baseline.</li>
+      </ul>
+
+      <h3>Week 3: Texture Refinement</h3>
+      <ul>
+        <li>Implement automatic detection of shared and repeated textures.</li>
+        <li>Implement techniques to jointly optimize identified textures.</li>
+        <li>Compare techniques against the baseline.</li>
+      </ul>
+
+      <h3>Week 4: Experiments and Presentation</h3>
+      <ul>
+        <li>Run configuration combinations at several seeds and collect results.</li>
+        <li>Finalize code deliverables and artifacts.</li>
+        <li>Write the final paper and prepare the final presentation/demo.</li>
+      </ul>
+
+      <h2>Resources</h2>
+
+      <h3>Software</h3>
+      <ul>
+        <li>Python</li>
+        <li>OpenCV</li>
+        <li><a href="https://github.com/colmap/colmap">COLMAP</a></li>
+        <li><a href="https://docs.nerf.studio/nerfology/methods/splat.html">Nerfstudio/Splatfacto</a></li>
+      </ul>
+
+      <h3>Compute</h3>
+      <ul>
+        <li>Modal CPU instances for frame processing and COLMAP</li>
+        <li>Modal NVIDIA L4 GPU instances for Splatfacto training and rendering</li>
+      </ul>
+
+      <h3>Papers</h3>
+      <ul>
+        <li>Bernhard Kerbl, Georgios Kopanas, Thomas Leimkühler, and George Drettakis. <a href="https://arxiv.org/abs/2308.04079"><i>3D Gaussian Splatting for Real-Time Radiance Field Rendering</i></a>. ACM Transactions on Graphics, 2023.</li>
+        <li>Johannes L. Schönberger and Jan-Michael Frahm. <a href="https://openaccess.thecvf.com/content_cvpr_2016/papers/Schonberger_Structure-From-Motion_Revisited_CVPR_2016_paper.pdf"><i>Structure-from-Motion Revisited</i></a>. CVPR, 2016.</li>
+        <li>Nicolás Violante, Andreas Meuleman, Alban Gauthier, Fredo Durand, Thibault Groueix, and George Drettakis. <a href="https://repo-sam.inria.fr/nerphys/splat-and-replace/splat_and_replace.pdf"><i>Splat and Replace: 3D Reconstruction with Repetitive Elements</i></a>. SIGGRAPH Conference Papers, 2025.</li>
+        <li>Paul Ungermann et al. <a href="https://arxiv.org/abs/2408.11697"><i>Robust 3D Gaussian Splatting for Novel View Synthesis in Presence of Distractors</i></a>. 2024.</li>
+      </ul>
+    </div>
+  </body>
+</html>
