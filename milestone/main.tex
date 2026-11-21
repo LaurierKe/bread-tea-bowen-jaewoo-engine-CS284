@@ -1,5 +1,5 @@
 
-\documentclass[sigconf,nonacm,pbalance]{../template/acmart}
+\documentclass[sigconf,nonacm,balance=false]{../template/acmart}
 
 \settopmatter{authorsperrow=4}
 \setcopyright{none}
@@ -27,27 +27,47 @@
 \author{Jameson Liu}
 \affiliation{\institution{UC Berkeley}\city{Berkeley}\state{California}\country{USA}}
 
+\begin{teaserfigure}
+  \centering
+  \includegraphics[width=\textwidth]{figures/pipeline.pdf}
+  \caption{GameSplat pipeline from calibrated frames to local texture refinement.}
+  \Description{Five steps show MineSplat capture, a fixed-pose Splatfacto baseline, repeated-patch matching, donor splat transfer, and further training with splats outside the receiving patch frozen.}
+  \label{fig:gamesplat-pipeline}
+\end{teaserfigure}
+
 \maketitle
+\raggedbottom
 
 \section*{Change in Scope}
 
 Our original plan was to build an end-to-end pipeline from raw gameplay recordings to Gaussian splats, including automatic UI masking and camera pose recovery.
 After proposal feedback, we set aside the raw-footage pipeline and made texture reuse the focus of the project.
-We now test whether a well-observed patch can improve reconstruction of a poorly observed copy of the same texture, even when the two patches are on different shapes.
-The method is designed to work across games.
-For our Minecraft experiments, we use \href{https://github.com/ipechman/MineSplat}{MineSplat}, a mod that captures clean frames and exports the corresponding calibrated camera poses.
+Repeated textures are common in games.
+We test whether a well-observed patch can improve reconstruction of a poorly observed copy of the same texture.
+We chose Minecraft for our experiments because we can readily capture clean frames with accurate camera poses.
+Under the revised plan, we've built the texture-matching and refinement pipeline and run the first controlled comparisons.
 
 \section*{Work Completed}
 
-We train a fixed-pose Splatfacto baseline from the images and camera poses.
-We then find repeated patches by matching RootSIFT features across overlapping images and triangulating those features into 3D landmarks.
-We align groups of landmarks by rotating, scaling, and translating them, then verify each match by projecting the aligned landmarks into reserved training views.
+We capture our inputs with MineSplat~\cite{minesplat}, a Minecraft mod that records clean frames and exports their calibrated camera poses.
+We use 1,944 frames for training and separate sets of 324 frames each for validation and final testing.
+We train a fixed-pose Splatfacto baseline~\cite{splatfacto} and run our refinement experiments on Modal GPUs.
 
-After verifying the matches, we test whether texture refinement improves the reconstruction.
-Our method uses the patch alignment to copy splats from the better-sampled patch into the receiving patch at low opacity.
-We keep additions that lower rendering error on the reserved views, then refine the receiving patches.
-We compare this with a Gaussian unioning method based on \emph{Splat and Replace} (\href{https://repo-sam.inria.fr/nerphys/splat-and-replace/splat_and_replace.pdf}{Violante et al., 2025}).
-Using the same feature matching procedure, we take the union of the aligned splats from both patches, replace each patch's original splats with a copy of that template, and fit the copies jointly.
+First, we match RootSIFT~\cite{rootsift} keypoints across overlapping training images to track the same scene point from several camera positions.
+We triangulate each track using the known camera poses and attach its feature descriptor to the resulting 3D landmark.
+To find repeated textures, we look for landmarks in different parts of the scene with similar descriptors, then check whether their neighbors match too.
+For each candidate pair, we fit a rotation, scale, and translation that maps the better-sampled patch's landmarks onto the receiving patch's landmarks.
+We verify the mapping by projecting the transformed landmarks into reserved training views and checking for nearby keypoints with similar descriptors.
+
+To identify the Gaussians for a patch, we first shortlist splats whose centers are near its landmarks in 3D.
+In several training views, we project the landmarks and use their convex hull as a patch mask.
+We estimate each splat's contribution by measuring how sensitive the rendered pixels are to its base color, both inside the mask and across the full image.
+We keep splats that contribute inside the mask in at least two views and whose contribution inside the masks is at least 72\% of their total across the sampled views.
+
+For texture refinement, we use the landmark alignment to place low-opacity copies of the selected splats from the better-sampled patch into the receiving patch.
+We keep copies that reduce rendering error on reserved training views, then refine the receiving patch.
+We compare this with Gaussian unioning based on \emph{Splat and Replace}~\cite{splat-and-replace}.
+For a verified match, we take the union of both patches' aligned splats, replace each patch with a copy of the template, and fit the copies jointly.
 The pipeline exports PLYs and flythroughs.
 
 \begin{figure}[H]
@@ -62,27 +82,53 @@ The pipeline exports PLYs and flythroughs.
 
 \section*{Preliminary Results}
 
-Both tests started from the original 30,000-step Splatfacto baseline and ran 2,000 refinement steps with splats outside the edited patches frozen.
+For splat transfer and Gaussian unioning, we refined the 30,000-step Splatfacto baseline for 2,000 steps and froze splats outside the edited patches.
 
-For splat transfer, the matched control trained the same receiving splats on the same schedule without adding any splats, so we could measure what the transferred splats contribute.
-Ordinary whole-scene training gave us a second comparison for the same step budget.
-Mean test PSNR on the receiving patches was 35.69~dB with transfer, 34.65~dB at baseline, 35.21~dB with receiver-only training, and 35.30~dB with whole-scene training.
-On validation, the corresponding scores were 35.88, 34.99, 35.47, and 35.87~dB.
+For splat transfer, the receiver-only control trained the same original splats in the receiving patches on the same schedule to measure what the added splats contribute.
+Ordinary whole-scene training shows what the same budget achieves across the scene.
+For Gaussian unioning, the control fit each patch's original splats independently with the same crops, loss, and schedule to test whether sharing a template helps.
 
-For Gaussian unioning, the control refined the original splats in each patch independently using the same crops, loss, and schedule to test what sharing a union template contributes.
-Mean test PSNR across both patches was 32.40~dB with unioning, 33.71~dB at baseline, and 33.75~dB with independent refinement.
-The validation scores were 36.40, 37.45, and 37.18~dB, respectively.
-We suspect a shared template discards useful geometry when different shapes share a texture.
+\begin{table}[H]
+  \caption{Mean patch PSNR (dB) on held-out views.
+  Splat transfer is scored on its receiving patches and unioning on both patches of its matched pair.
+  All rows within each block use the same masks.}
+  \label{tab:patch-psnr}
+  \centering
+  \begin{tabular*}{\columnwidth}{@{}l@{\extracolsep{\fill}}rr@{}}
+    \toprule
+    Method & Validation & Test \\
+    \midrule
+    \multicolumn{3}{@{}l}{\textit{Splat transfer experiment}} \\
+    Original baseline & 34.99 & 34.65 \\
+    Receiver-only training & 35.47 & 35.21 \\
+    Whole-scene training & 35.87 & 35.30 \\
+    Splat transfer & 35.88 & 35.69 \\
+    \addlinespace
+    \multicolumn{3}{@{}l}{\textit{Gaussian unioning experiment}} \\
+    Original baseline & 37.45 & 33.71 \\
+    Independent patch refinement & 37.18 & 33.75 \\
+    Gaussian unioning & 36.40 & 32.40 \\
+    \bottomrule
+  \end{tabular*}
+\end{table}
 
+Splat transfer improved patch PSNR over the baseline and both controls, with a 0.48~dB test gain over receiver-only training.
+Gaussian unioning scored below the baseline and independent patch refinement on both splits.
 Both methods changed full-frame PSNR by less than 0.01~dB from the baseline.
-A run with many high-resolution views showed how little room there is to improve patches the baseline already reconstructs well.
+
+\emph{Splat and Replace} combines repeated objects so one copy can supply geometry occluded in another~\cite{splat-and-replace}.
+A better-sampled texture match mainly reveals finer surface detail, which we suspect overlapping splats in the union obscure.
+We use donor splats only for initialization and let the copies diverge from the donor as they fit the receiver's views.
+
+We ran a separate experiment with many more images at higher resolution and saw little gain over the starting Splatfacto reconstruction.
+We suspect the baseline had already captured much of the texture detail.
 
 \begin{figure}[H]
   \centering
   \patchpanel{.31\linewidth}{Held-out input}{receiver}{17mm}\hfill
   \patchpanel{.31\linewidth}{Baseline render}{baseline}{17mm}\hfill
-  \patchpanel{.31\linewidth}{Refined render}{refined}{17mm}
-  \caption{The held-out reference, Splatfacto baseline, and texture-refined render share a camera pose.
+  \patchpanel{.31\linewidth}{Splat transfer}{refined}{17mm}
+  \caption{The held-out reference, Splatfacto baseline, and splat-transfer render share a camera pose.
   The top row boxes the receiving patch, and the bottom row shows the same crop in all three views.}
   \Description{Three columns showing boxed full frames above zoomed views of the same patch.}
   \label{fig:held-out-comparison}
@@ -90,9 +136,16 @@ A run with many high-resolution views showed how little room there is to improve
 
 \section*{Remaining Work}
 
-We'll test ways to share appearance while fitting each patch's geometry separately.
-We'll compare them with splat transfer, Gaussian unioning, and ordinary training using the same checkpoint and number of steps.
-We'll vary image resolution and view coverage and evaluate on held-out images across captures and seeds.
-Shifted transfers and equal-count additions will help isolate what the match contributes.
+We've already tested using donor color and geometry to initialize the receiver, then refining it with the standard image loss.
+We'll keep the donor fixed in every variant and compare initialization alone with continued donor guidance.
+The guided runs start from the same initialization and add a loss that penalizes deviations from the transferred donor values during refinement.
+We'll test both approaches with color alone and with color plus geometry, using the same patch pairs and refinement budget with appropriate controls.
+
+We'll repeat the study across more Minecraft scenes to see how consistently texture reuse improves reconstruction.
+We'll also test sparser or lower-resolution inputs, where the baseline recovers less detail and a well-observed repeat may yield larger gains.
+We'll measure patch PSNR and pixel-weighted error on held-out views.
+
+\bibliographystyle{ACM-Reference-Format}
+\bibliography{references}
 
 \end{document}

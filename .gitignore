@@ -1,6 +1,8 @@
 /milestone/*
 !/milestone/main.tex
+!/milestone/references.bib
 !/milestone/figures/
 /milestone/figures/*
 !/milestone/figures/*.png
+!/milestone/figures/pipeline.pdf
 /template
