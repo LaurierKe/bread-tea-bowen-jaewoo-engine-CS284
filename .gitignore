@@ -1,0 +1,6 @@
+/milestone/*
+!/milestone/main.tex
+!/milestone/figures/
+/milestone/figures/*
+!/milestone/figures/*.png
+/template
